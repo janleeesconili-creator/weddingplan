@@ -89,7 +89,7 @@ export default function Home() {
         <header><button className="menu" onClick={() => setMobileNav(!mobileNav)}>☰</button><div><p>{coupleName}</p><h1>{title}</h1></div><div className="save-state"><i /> Saved automatically</div></header>
         <div className="content">
           {view === "setup" && <Setup profile={profile} setProfile={setProfile} weddingDate={weddingDate} setWeddingDate={setWeddingDate} budgetGoal={budgetGoal} setBudgetGoal={setBudgetGoal} formatMoney={formatMoney} />}
-          {view === "dashboard" && <Dashboard totals={totals} goal={budgetGoal} days={days} expenses={expenses} guests={guests} tasks={tasks} go={setView} money={formatMoney} />}
+          {view === "dashboard" && <Dashboard totals={totals} goal={budgetGoal} days={days} expenses={expenses} guests={guests} tasks={tasks} go={setView} money={formatMoney} profile={profile} />}
           {view === "budget" && <Budget expenses={expenses} setExpenses={setExpenses} goal={budgetGoal} setGoal={setBudgetGoal} totals={totals} money={formatMoney} />}
           {view === "guests" && <Guests guests={guests} setGuests={setGuests} />}
           {view === "tasks" && <Tasks tasks={tasks} setTasks={setTasks} />}
@@ -129,24 +129,50 @@ function Setup({ profile, setProfile, weddingDate, setWeddingDate, budgetGoal, s
   </div>;
 }
 
-function Dashboard({ totals, goal, days, expenses, guests, tasks, go, money }: { totals: { budget: number; actual: number; paid: number }; goal: number; days: number; expenses: Expense[]; guests: Guest[]; tasks: Task[]; go: (s: string) => void; money: (n: number) => string }) {
+function Dashboard({ totals, goal, days, expenses, guests, tasks, money, profile }: { totals: { budget: number; actual: number; paid: number }; goal: number; days: number; expenses: Expense[]; guests: Guest[]; tasks: Task[]; go: (s: string) => void; money: (n: number) => string; profile: Profile }) {
   const remaining = goal - totals.actual, outstanding = totals.actual - totals.paid;
-  return <div className="stack">
-    <section className="hero"><div><span className="eyebrow">THE BIG DAY</span><h2>{days} <em>days to go</em></h2><p>Everything for your celebration, beautifully organized in one place.</p></div><div className="rings">○<span>○</span></div></section>
-    <div className="stat-grid">
-      <Stat label="Wedding budget" value={money(goal)} note={`${Math.round(totals.actual / goal * 100)}% allocated`} />
-      <Stat label="Actual cost" value={money(totals.actual)} note={`${money(remaining)} remaining`} />
-      <Stat label="Paid so far" value={money(totals.paid)} note={`${money(outstanding)} outstanding`} />
-      <Stat label="Guests attending" value={`${guests.filter(g => g.rsvp === "Yes").length}`} note={`${guests.filter(g => g.rsvp === "Pending").length} awaiting reply`} />
-    </div>
-    <div className="dashboard-grid">
-      <Card title="Budget by category" action="View budget" onAction={() => go("budget")}><Donut percent={Math.min(100, totals.actual / goal * 100)} center={money(remaining)} /><div className="legend">{expenses.slice(0, 5).map((e, i) => <p key={e.id}><i style={{ background: ["#17304f", "#b79260", "#dfc9aa", "#4c3b2f", "#8a735f"][i] }} />{e.category}<b>{money(e.actual)}</b></p>)}</div></Card>
-      <Card title="Upcoming payments" action="Manage" onAction={() => go("budget")}><div className="rows">{expenses.filter(e => e.actual > e.paid).slice(0, 4).map(e => <div className="row" key={e.id}><div><b>{e.item}</b><small>Due {e.due || "TBD"}</small></div><strong>{money(e.actual - e.paid)}</strong></div>)}</div></Card>
-      <Card title="Planning progress" action="All tasks" onAction={() => go("tasks")}><div className="progress-big"><b>{Math.round(tasks.filter(t => t.status === "Completed").length / tasks.length * 100)}%</b><span>complete</span></div><div className="progress"><i style={{ width: `${tasks.filter(t => t.status === "Completed").length / tasks.length * 100}%` }} /></div><div className="task-mini">{tasks.slice(0, 3).map(t => <p key={t.id}><span className={t.status === "Completed" ? "done" : ""}>✓</span>{t.task}<small>{t.status}</small></p>)}</div></Card>
-      <Card title="RSVP overview" action="Guest list" onAction={() => go("guests")}><div className="rsvp"><div><b>{guests.filter(g => g.rsvp === "Yes").length}</b><span>Attending</span></div><div><b>{guests.filter(g => g.rsvp === "Pending").length}</b><span>Pending</span></div><div><b>{guests.filter(g => g.rsvp === "No").length}</b><span>Declined</span></div></div><Donut percent={guests.length ? guests.filter(g => g.rsvp === "Yes").length / guests.length * 100 : 0} center={`${guests.length} guests`} /></Card>
+  const yes = guests.filter(g => g.rsvp === "Yes").length, pending = guests.filter(g => g.rsvp === "Pending").length, no = guests.filter(g => g.rsvp === "No").length;
+  const completed = tasks.filter(t => t.status === "Completed").length;
+  const taskProgress = tasks.length ? completed / tasks.length * 100 : 0;
+  const [emergency] = useSaved<Record<string, boolean>>("ever-after-checklist", {});
+  const emergencyTotal = modules.checklist.groups.reduce((n, [, items]) => n + items.length, 0);
+  const emergencyDone = Object.values(emergency).filter(Boolean).length;
+  const emergencyPercent = emergencyTotal ? emergencyDone / emergencyTotal * 100 : 0;
+  const dietary = ["None", "Vegetarian", "Vegan", "No Nuts", "Custom"].map(label => ({ label, count: guests.filter(g => label === "Custom" ? !["None", "Vegetarian", "Vegan", "No Nuts"].includes(g.dietary) : g.dietary === label).length }));
+  const maxActual = Math.max(1, ...expenses.map(e => e.actual));
+  return <div className="sheet-dashboard">
+    <section className="sheet-title"><h2>WEDDING DASHBOARD</h2><b>{profile.partner1}</b><span>❧</span><b>{profile.partner2}</b></section>
+    <div className="sheet-grid">
+      <div className="sheet-column">
+        <DashPanel title="Budget Summary"><div className="summary-table">{[["Target budget", goal], ["Total budget cost", totals.budget], ["Total actual cost", totals.actual], ["Total actual paid", totals.paid], ["Total outstanding", outstanding]].map(([label, value]) => <p key={String(label)}><span>{label}</span><b>{money(Number(value))}</b></p>)}</div></DashPanel>
+        <DashPanel title="Budget Categories"><Donut percent={Math.min(100, totals.actual / Math.max(1, goal) * 100)} center={`${Math.round(totals.actual / Math.max(1, goal) * 100)}%`} /><div className="mini-legend">{expenses.slice(0, 6).map((e, i) => <span key={e.id}><i style={{ background: ["#4b392c", "#7c624e", "#b68b67", "#dec4a6", "#d8d5d2", "#9a8371"][i] }} />{e.category}</span>)}</div></DashPanel>
+        <DashPanel title="Left To Budget"><Donut percent={Math.min(100, totals.actual / Math.max(1, goal) * 100)} center={money(remaining)} /></DashPanel>
+        <DashPanel title="Top Costs By Category"><div className="cost-list">{[...expenses].sort((a,b) => b.actual-a.actual).slice(0,8).map(e => <p key={e.id}><span>{e.category}</span><b>{money(e.budget)}</b><b>{money(e.actual)}</b></p>)}</div></DashPanel>
+      </div>
+      <div className="sheet-column sheet-main">
+        <DashPanel title="Budget v Actual"><div className="budget-bars">{expenses.slice(0,9).map(e => <div key={e.id}><span>{e.category}</span><i><b style={{ width: `${e.actual / maxActual * 100}%` }} /></i><small>{money(e.actual)}</small></div>)}</div></DashPanel>
+        <div className="inspiration-card"><div className="inspire-copy"><span>OUR WEDDING</span><b>{profile.partner1} & {profile.partner2}</b><small>navy · gold · timeless</small></div><div className="palette">{["#152b48","#b78b32","#e0b968","#f4efe6"].map(c => <i key={c} style={{background:c}} />)}</div></div>
+        <DashPanel title="Emergency Checklist Completion"><Donut percent={emergencyPercent} center={`${Math.round(emergencyPercent)}%`} /></DashPanel>
+        <DashPanel title="Outfits"><div className="outfit-row"><span>{profile.partner1}</span><b>Final pick up</b><span>{profile.partner2}</span><b>Final pick up</b></div></DashPanel>
+      </div>
+      <div className="sheet-column sheet-wide">
+        <div className="top-overview">
+          <DashPanel title="RSVP Status"><Donut percent={guests.length ? yes / guests.length * 100 : 0} center={`${yes}/${guests.length}`} /></DashPanel>
+          <div className="days-panel"><b>{days}</b><span>DAYS TO GO</span></div>
+          <DashPanel title="Invitation Overview"><div className="summary-table">{[["Sent", guests.length], ["Attending", yes], ["Declined", no], ["Outstanding", pending]].map(([l,v]) => <p key={String(l)}><span>{l}</span><b>{v}</b></p>)}</div></DashPanel>
+        </div>
+        <div className="split-overview">
+          <DashPanel title="Dietary Requirements"><div className="diet-bars">{dietary.map(d => <div key={d.label}><span>{d.label}</span><i><b style={{width:`${guests.length ? d.count/guests.length*100 : 0}%`}} /></i><em>{d.count}</em></div>)}</div></DashPanel>
+          <DashPanel title="Other Events"><div className="summary-table">{["Engagement Party","Bachelor Party","Bachelorette Party","Bridal Shower"].map(x => <p key={x}><span>{x}</span><b>—</b></p>)}</div></DashPanel>
+        </div>
+        <DashPanel title="Tasks"><div className="task-sheet"><div><b>Upcoming deadlines</b>{tasks.filter(t => t.status !== "Completed").slice(0,7).map(t => <p key={t.id}>{t.task}<span>{t.due || "TBD"}</span></p>)}</div><div className="task-chart"><b>Tasks by status</b><span style={{height:`${Math.max(8,taskProgress)}%`}}>Done {completed}</span><span style={{height:`${Math.max(8,100-taskProgress)}%`}}>Open {tasks.length-completed}</span></div></div></DashPanel>
+        <div className="open-panels"><DashPanel title="Open Tasks - Priority"><div className="blank-metric">{tasks.filter(t => t.status !== "Completed" && t.priority === "High").length}<small>high priority</small></div></DashPanel><DashPanel title="Open Tasks - Status"><div className="blank-metric">{tasks.length-completed}<small>tasks remaining</small></div></DashPanel></div>
+      </div>
     </div>
   </div>;
 }
+
+function DashPanel({ title, children }: { title: string; children: React.ReactNode }) { return <section className="dash-panel"><h3>{title}</h3><div>{children}</div></section> }
 
 function Budget({ expenses, setExpenses, goal, setGoal, totals, money }: { expenses: Expense[]; setExpenses: (x: Expense[]) => void; goal: number; setGoal: (n: number) => void; totals: { budget: number; actual: number; paid: number }; money: (n: number) => string }) {
   const add = () => setExpenses([...expenses, { id: Date.now(), category: "Other", item: "New expense", budget: 0, actual: 0, paid: 0, due: "" }]);
