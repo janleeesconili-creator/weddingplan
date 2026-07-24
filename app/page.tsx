@@ -5,10 +5,22 @@ import { useEffect, useMemo, useState } from "react";
 type Expense = { id: number; category: string; item: string; budget: number; actual: number; paid: number; due: string };
 type Guest = { id: number; name: string; side: string; table: number; rsvp: "Yes" | "No" | "Pending"; dietary: string };
 type Task = { id: number; task: string; category: string; due: string; priority: "High" | "Normal" | "Low"; status: "Not Started" | "In Progress" | "Completed" };
+type Profile = { partner1: string; partner2: string; country: string; currency: string; symbol: string };
 
-const money = (n: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 0 }).format(n);
+const countries = [
+  { country: "Philippines", currency: "PHP", symbol: "₱", locale: "en-PH" },
+  { country: "United States", currency: "USD", symbol: "$", locale: "en-US" },
+  { country: "Taiwan", currency: "TWD", symbol: "NT$", locale: "zh-TW" },
+  { country: "Singapore", currency: "SGD", symbol: "S$", locale: "en-SG" },
+  { country: "Canada", currency: "CAD", symbol: "C$", locale: "en-CA" },
+  { country: "Australia", currency: "AUD", symbol: "A$", locale: "en-AU" },
+  { country: "United Kingdom", currency: "GBP", symbol: "£", locale: "en-GB" },
+  { country: "Eurozone", currency: "EUR", symbol: "€", locale: "en-IE" },
+  { country: "Japan", currency: "JPY", symbol: "¥", locale: "ja-JP" },
+  { country: "Hong Kong", currency: "HKD", symbol: "HK$", locale: "en-HK" },
+];
 const nav = [
-  ["dashboard", "⌂", "Dashboard"], ["budget", "₱", "Budget"], ["guests", "♙", "Guest List"],
+  ["setup", "⚙", "Setup"], ["dashboard", "⌂", "Dashboard"], ["budget", "₱", "Budget"], ["guests", "♙", "Guest List"],
   ["tasks", "✓", "Task Tracker"], ["calendar", "□", "Calendar"], ["venues", "⌖", "Venues & Vendors"],
   ["seating", "◉", "Seating Plan"], ["checklist", "☑", "Emergency Kit"], ["timeline", "◷", "Wedding Timeline"],
   ["playlist", "♫", "Playlist"], ["outfits", "♢", "Outfits"], ["photos", "▣", "Photography"],
@@ -53,6 +65,7 @@ export default function Home() {
   const [tasks, setTasks] = useSaved<Task[]>("ever-after-tasks", seedTasks);
   const [budgetGoal, setBudgetGoal] = useSaved("ever-after-budget-goal", 458502);
   const [weddingDate, setWeddingDate] = useSaved("ever-after-date", "2026-11-21");
+  const [profile, setProfile] = useSaved<Profile>("ever-after-profile", { partner1: "Janlee", partner2: "Tim", country: "Philippines", currency: "PHP", symbol: "₱" });
   const totals = useMemo(() => ({
     budget: expenses.reduce((a, b) => a + b.budget, 0),
     actual: expenses.reduce((a, b) => a + b.actual, 0),
@@ -60,23 +73,28 @@ export default function Home() {
   }), [expenses]);
   const days = Math.max(0, Math.ceil((new Date(weddingDate).getTime() - Date.now()) / 86400000));
   const title = nav.find(([id]) => id === view)?.[2] ?? "Dashboard";
+  const locale = countries.find(c => c.country === profile.country)?.locale ?? "en-US";
+  const formatMoney = (n: number) => `${profile.symbol}${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(n)}`;
+  const initials = `${profile.partner1.trim().charAt(0) || "J"}&${profile.partner2.trim().charAt(0) || "T"}`.toUpperCase();
+  const coupleName = `${profile.partner1} & ${profile.partner2}`.toUpperCase();
 
   return (
     <main className="app-shell">
       <aside className={mobileNav ? "sidebar open" : "sidebar"}>
-        <div className="brand"><span className="brand-mark">J&T</span><div><b>Ever After</b><small>Wedding Planner</small></div></div>
+        <div className="brand"><span className="brand-mark">{initials}</span><div><b>Ever After</b><small>Wedding Planner</small></div></div>
         <nav>{nav.map(([id, icon, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => { setView(id); setMobileNav(false); }}><span>{icon}</span>{label}</button>)}</nav>
         <div className="side-card"><small>WEDDING DAY</small><strong>{days} days</strong><span>{new Date(weddingDate + "T00:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span></div>
       </aside>
       <section className="workspace">
-        <header><button className="menu" onClick={() => setMobileNav(!mobileNav)}>☰</button><div><p>JANLEE & TIM</p><h1>{title}</h1></div><div className="save-state"><i /> Saved automatically</div></header>
+        <header><button className="menu" onClick={() => setMobileNav(!mobileNav)}>☰</button><div><p>{coupleName}</p><h1>{title}</h1></div><div className="save-state"><i /> Saved automatically</div></header>
         <div className="content">
-          {view === "dashboard" && <Dashboard totals={totals} goal={budgetGoal} days={days} expenses={expenses} guests={guests} tasks={tasks} go={setView} />}
-          {view === "budget" && <Budget expenses={expenses} setExpenses={setExpenses} goal={budgetGoal} setGoal={setBudgetGoal} totals={totals} />}
+          {view === "setup" && <Setup profile={profile} setProfile={setProfile} weddingDate={weddingDate} setWeddingDate={setWeddingDate} budgetGoal={budgetGoal} setBudgetGoal={setBudgetGoal} formatMoney={formatMoney} />}
+          {view === "dashboard" && <Dashboard totals={totals} goal={budgetGoal} days={days} expenses={expenses} guests={guests} tasks={tasks} go={setView} money={formatMoney} />}
+          {view === "budget" && <Budget expenses={expenses} setExpenses={setExpenses} goal={budgetGoal} setGoal={setBudgetGoal} totals={totals} money={formatMoney} />}
           {view === "guests" && <Guests guests={guests} setGuests={setGuests} />}
           {view === "tasks" && <Tasks tasks={tasks} setTasks={setTasks} />}
           {view === "calendar" && <Calendar date={weddingDate} setDate={setWeddingDate} tasks={tasks} />}
-          {view === "venues" && <Venues />}
+          {view === "venues" && <Venues money={formatMoney} />}
           {view === "seating" && <Seating guests={guests} />}
           {view === "checklist" && <Checklist />}
           {view === "timeline" && <Timeline />}
@@ -89,7 +107,29 @@ export default function Home() {
   );
 }
 
-function Dashboard({ totals, goal, days, expenses, guests, tasks, go }: { totals: { budget: number; actual: number; paid: number }; goal: number; days: number; expenses: Expense[]; guests: Guest[]; tasks: Task[]; go: (s: string) => void }) {
+function Setup({ profile, setProfile, weddingDate, setWeddingDate, budgetGoal, setBudgetGoal, formatMoney }: { profile: Profile; setProfile: (p: Profile) => void; weddingDate: string; setWeddingDate: (d: string) => void; budgetGoal: number; setBudgetGoal: (n: number) => void; formatMoney: (n: number) => string }) {
+  const updateCountry = (country: string) => {
+    const choice = countries.find(c => c.country === country);
+    setProfile(choice ? { ...profile, country, currency: choice.currency, symbol: choice.symbol } : { ...profile, country });
+  };
+  return <div className="stack">
+    <div className="page-lead"><div><span className="eyebrow">MAKE IT YOURS</span><h2>Wedding Setup</h2><p>Edit the details that appear throughout your planner.</p></div></div>
+    <Card title="Couple & celebration details">
+      <div className="setup-grid">
+        <label><span>Partner 1</span><input value={profile.partner1} onChange={e => setProfile({ ...profile, partner1: e.target.value })} /></label>
+        <label><span>Partner 2</span><input value={profile.partner2} onChange={e => setProfile({ ...profile, partner2: e.target.value })} /></label>
+        <label><span>Wedding date</span><input type="date" value={weddingDate} onChange={e => setWeddingDate(e.target.value)} /></label>
+        <label><span>Wedding budget</span><input type="number" min="0" value={budgetGoal} onChange={e => setBudgetGoal(+e.target.value)} /><small>{formatMoney(budgetGoal)}</small></label>
+        <label><span>Country</span><select value={profile.country} onChange={e => updateCountry(e.target.value)}>{countries.map(c => <option key={c.country}>{c.country}</option>)}</select></label>
+        <label><span>Currency</span><input value={profile.currency} onChange={e => setProfile({ ...profile, currency: e.target.value.toUpperCase() })} /></label>
+        <label><span>Currency symbol</span><input value={profile.symbol} onChange={e => setProfile({ ...profile, symbol: e.target.value })} /></label>
+      </div>
+      <div className="setup-note"><b>Saved automatically</b><span>Your names, date, budget, and currency update across this device.</span></div>
+    </Card>
+  </div>;
+}
+
+function Dashboard({ totals, goal, days, expenses, guests, tasks, go, money }: { totals: { budget: number; actual: number; paid: number }; goal: number; days: number; expenses: Expense[]; guests: Guest[]; tasks: Task[]; go: (s: string) => void; money: (n: number) => string }) {
   const remaining = goal - totals.actual, outstanding = totals.actual - totals.paid;
   return <div className="stack">
     <section className="hero"><div><span className="eyebrow">THE BIG DAY</span><h2>{days} <em>days to go</em></h2><p>Everything for your celebration, beautifully organized in one place.</p></div><div className="rings">○<span>○</span></div></section>
@@ -108,7 +148,7 @@ function Dashboard({ totals, goal, days, expenses, guests, tasks, go }: { totals
   </div>;
 }
 
-function Budget({ expenses, setExpenses, goal, setGoal, totals }: { expenses: Expense[]; setExpenses: (x: Expense[]) => void; goal: number; setGoal: (n: number) => void; totals: { budget: number; actual: number; paid: number } }) {
+function Budget({ expenses, setExpenses, goal, setGoal, totals, money }: { expenses: Expense[]; setExpenses: (x: Expense[]) => void; goal: number; setGoal: (n: number) => void; totals: { budget: number; actual: number; paid: number }; money: (n: number) => string }) {
   const add = () => setExpenses([...expenses, { id: Date.now(), category: "Other", item: "New expense", budget: 0, actual: 0, paid: 0, due: "" }]);
   const update = (id: number, field: keyof Expense, value: string | number) => setExpenses(expenses.map(e => e.id === id ? { ...e, [field]: value } : e));
   return <div className="stack"><div className="page-lead"><div><span className="eyebrow">MONEY, MADE SIMPLE</span><h2>Wedding Budget</h2><p>Track every peso—from first deposit to final payment.</p></div><button className="primary" onClick={add}>＋ Add expense</button></div>
@@ -133,7 +173,7 @@ function Calendar({ date, setDate, tasks }: { date: string; setDate: (d: string)
   return <div className="stack"><div className="page-lead"><div><span className="eyebrow">SAVE THE DATE</span><h2>Wedding Calendar</h2><p>See the milestones that matter most.</p></div><label className="date-control">Wedding date<input type="date" value={date} onChange={e => setDate(e.target.value)} /></label></div><Card title="Upcoming schedule"><div className="agenda">{tasks.filter(t => t.due).sort((a,b) => a.due.localeCompare(b.due)).map(t => <div key={t.id}><time>{new Date(t.due + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</time><span><b>{t.task}</b><small>{t.category} · {t.status}</small></span></div>)}</div></Card></div>;
 }
 
-function Venues() { return <SimplePage eyebrow="FIND THE PERFECT TEAM" title="Venues & Vendors" subtitle="Compare options, then keep your chosen suppliers close."><div className="compare-grid">{["Lolita's Events Place", "Alessia Garden", "Bonnie's Events"].map((x, i) => <article key={x}><span className="chip">{i === 0 ? "SELECTED" : "OPTION"}</span><h3>{x}</h3><p>{["San Mateo, Rizal", "San Juan", "Quezon City"][i]}</p><hr/><p>Capacity <b>{[100,100,120][i]} guests</b></p><p>Package <b>{money([66000,80000,75000][i])}</b></p><button className="secondary">{i === 0 ? "Selected ✓" : "View details"}</button></article>)}</div></SimplePage> }
+function Venues({ money }: { money: (n: number) => string }) { return <SimplePage eyebrow="FIND THE PERFECT TEAM" title="Venues & Vendors" subtitle="Compare options, then keep your chosen suppliers close."><div className="compare-grid">{["Lolita's Events Place", "Alessia Garden", "Bonnie's Events"].map((x, i) => <article key={x}><span className="chip">{i === 0 ? "SELECTED" : "OPTION"}</span><h3>{x}</h3><p>{["San Mateo, Rizal", "San Juan", "Quezon City"][i]}</p><hr/><p>Capacity <b>{[100,100,120][i]} guests</b></p><p>Package <b>{money([66000,80000,75000][i])}</b></p><button className="secondary">{i === 0 ? "Selected ✓" : "View details"}</button></article>)}</div></SimplePage> }
 function Seating({ guests }: { guests: Guest[] }) { const tables = Array.from({length: Math.max(6, ...guests.map(g => g.table))},(_,i)=>i+1); return <SimplePage eyebrow="EVERYONE HAS A PLACE" title="Seating Plan" subtitle="Table assignments update automatically from your guest list."><div className="seat-grid">{tables.map(n => <article key={n}><h3>Table {n}</h3>{guests.filter(g => g.table === n).map(g => <p key={g.id}>{g.name}<small>{g.rsvp}</small></p>)}{!guests.some(g => g.table === n) && <span className="empty">No guests assigned</span>}</article>)}</div></SimplePage> }
 
 const modules: Record<string, { eyebrow: string; title: string; subtitle: string; groups: [string, string[]][] }> = {
